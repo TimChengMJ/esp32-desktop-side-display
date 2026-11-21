@@ -1,0 +1,28 @@
+# 构建产物
+build/
+build_*/
+*.o
+*.obj
+*.elf
+*.map
+
+# 模拟器
+simulator/build/
+simulator/*.bmp
+simulator/out_*.txt
+*.exe
+*.dll
+
+# Python
+__pycache__/
+*.pyc
+
+# 运行时数据（含个人工时记录）
+config.json
+work_log.json
+*.log
+*.bmp
+
+# 编辑器
+.vscode/
+.idea/
