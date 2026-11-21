@@ -60,18 +60,23 @@
 │   ├── simhei_wx.ttf         # 字库源文件（已裁剪）
 │   ├── gen_icons.py          # 生成 icons.c
 │   ├── partitions.csv        # 8MB 双 OTA 分区表
+│   ├── requirements.txt      # PC 端 Python 依赖
 │   └── —— PC 端 ——
 │   ├── pc_agent.py           # Flask 网页配置 + 采集 + 推送 + OTA 转发
 │   ├── work_monitor.py       # 工时状态机（锁屏检测 + 持久化）
 │   └── eventlog_work.py      # 读取安全日志首次解锁时间（需管理员）
 ├── simulator/                # LVGL PC 模拟器（不烧录直接看界面）
-├── docs/img/                 # 界面截图
+├── docs/
+│   ├── BUILD.md              # 编译与烧录指南（Windows）
+│   └── img/                  # 界面截图
 └── README.md
 ```
 
 ---
 
 ## 快速开始
+
+> 详细的编译、烧录、排错步骤见 **[docs/BUILD.md](docs/BUILD.md)**。下面是最短路径。
 
 ### 1. 固件
 
@@ -81,10 +86,10 @@
 
 | 库 | 版本 |
 |---|---|
-| Arduino_GFX_Library | 1.4.7 |
-| lvgl | 8.4.0 |
-| TAMC_GT911 | — |
-| ArduinoJson | 6.21.5 |
+| lvgl | **8.4.0** |
+| GFX Library for Arduino（Arduino_GFX） | **1.4.7** |
+| TAMC_GT911 | 1.0.2 |
+| ArduinoJson | **6.21.5** |
 
 **Arduino IDE 板子设置**：
 
@@ -92,17 +97,20 @@
 |---|---|
 | Board | ESP32S3 Dev Module |
 | Flash Size | 8MB |
-| Partition Scheme | 8M Flash (3MB APP) —— 需自定义分区表时用 `partitions.csv` |
+| Partition Scheme | Minimal SPIFFS (1.9MB APP) —— 实际布局由 `partitions.csv` 覆盖 |
 | PSRAM | **OPI PSRAM**（N8R8 必须） |
 | USB CDC On Boot | Disabled |
 
-> ⚠️ LVGL 的 `lv_conf.h` 中 `LV_MEM_SIZE` 必须 **≥ 96KB**。默认 48KB 时打开下拉菜单会因内存池耗尽卡死。
+> ⚠️ 两个必改项：
+> 1. `lv_conf.h` 的 `LV_MEM_SIZE` 必须 **≥ 96KB**，默认 48KB 会让**下拉菜单卡死**
+> 2. `lv_conf.h` 开头 `#if 0` 要改成 `#if 1`，否则配置不生效
 
 **命令行编译**：
 
 ```bash
 arduino-cli compile \
   --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashMode=qio,FlashSize=8M,PartitionScheme=min_spiffs,CDCOnBoot=default" \
+  --build-property "upload.maximum_size=3932160" \
   firmware
 ```
 
