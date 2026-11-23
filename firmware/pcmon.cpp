@@ -2,6 +2,9 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <Update.h>
+#include <esp_ota_ops.h>
+#include <esp_partition.h>
+#include <WiFi.h>
 
 SystemData g_sysData = {};
 
@@ -153,9 +156,40 @@ static void handle_pc_post() {
   server.send(200, "application/json", "{\"ok\":1}");
 }
 
-// GET /api/ping —— 方便 PC 端探测屏是否在线
+// GET /api/ping —— 探测在线，同时回传关键运行状态
 static void handle_ping() {
-  server.send(200, "application/json", "{\"ok\":1,\"fresh\":true}");
+  char b[160];
+  unsigned h_int = heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024;
+  unsigned h_ps  = heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024;
+  const esp_partition_t *rp = esp_ota_get_running_partition();
+  snprintf(b, sizeof(b), "{\"ok\":1,\"int\":%u,\"ps\":%u,\"up\":%u,\"run\":\"%s\"}",
+           h_int, h_ps, (unsigned)(millis() / 1000), rp ? rp->label : "?");
+  server.send(200, "application/json", b);
+}
+
+// GET /api/sys —— 运行中分区表与内存分布，用于远程确认设备状态
+// 坑（实测）：heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) 在 WebServer
+//   回调里调用会让接口无响应；ESP.getSketchSize() 会校验整个镜像同样阻塞。
+//   两者都不要在这里用。
+static void handle_sys() {
+  char buf[360];
+  const esp_partition_t *running = esp_ota_get_running_partition();
+  const esp_partition_t *next = esp_ota_get_next_update_partition(NULL);
+  unsigned h_int     = heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024;
+  unsigned h_psram   = heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024;
+  unsigned uptime_s  = millis() / 1000;
+  int data_age = g_sysData.valid ? (int)(millis() - g_sysData.last_update_ms) : -1;
+  snprintf(buf, sizeof(buf),
+    "{\"ok\":1,\"flash\":%d,\"psram\":%d,"
+    "\"heap_int\":%u,\"heap_psram\":%u,"
+    "\"uptime_s\":%u,\"data_age_ms\":%d,"
+    "\"run\":\"%s\",\"run_addr\":%u,\"run_size\":%u,\"next\":\"%s\"}",
+    (int)(ESP.getFlashChipSize() / 1024), (int)(ESP.getPsramSize() / 1024),
+    h_int, h_psram,
+    uptime_s, data_age,
+    running ? running->label : "?", (unsigned)(running ? running->address : 0), (unsigned)(running ? running->size : 0),
+    next ? next->label : "?");
+  server.send(200, "application/json", buf);
 }
 
 static void handle_not_found() {
@@ -220,6 +254,7 @@ static void handle_ota_done() {
 void pcmon_begin() {
   server.on("/api/pc", HTTP_POST, handle_pc_post);
   server.on("/api/ping", HTTP_GET, handle_ping);
+  server.on("/api/sys", HTTP_GET, handle_sys);
   server.on("/api/ota", HTTP_POST, handle_ota_done, handle_ota_upload);
   server.onNotFound(handle_not_found);
   server.begin();
